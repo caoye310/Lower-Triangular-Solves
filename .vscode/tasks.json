@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build CUDA",
+      "type": "shell",
+      "command": "nvcc",
+      "args": [
+        "-G", "-g",                         
+        "-std=c++17",
+        "-Iinclude",
+        "src/main.cu", "src/loadmm.cu", "src/mmio.c",
+        "-o", "build/run_sparse"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+

@@ -1,45 +1,47 @@
+// loadmm.cu
 #include <vector>
-#include <fstream>
-#include <iostream>
-#include "mmio.h"  // SuiteSparse or https://math.nist.gov/MatrixMarket/mmio-c.html
+#include <cstdio>
+#include "mmio.h"
+#include "csr_matrix.h"
 
-void load_mtx_to_csr(const char* fname,
-                     std::vector<int> &rowptr,
-                     std::vector<int> &colidx,
-                     std::vector<double> &val) {
-    FILE *f;
+void load_mtx_to_csr(const char* fname, CSRMatrix &A)
+{
+    FILE* f = fopen(fname, "r");
+    if (!f) { perror("fopen"); exit(EXIT_FAILURE); }
+
     MM_typecode matcode;
     int M, N, nz;
-
-    f = fopen(fname, "r");
     mm_read_banner(f, &matcode);
-    mm_read_mtx_crd_size(f, &M, &N, &nz);
+    mm_read_mtx_crd_size(f, &M, &N, &nz);     
 
     std::vector<int> I(nz), J(nz);
-    std::vector<float> V(nz);
-    for (int i = 0; i < nz; i++)
-        fscanf(f, "%d %d %f\n", &I[i], &J[i], &V[i]);
+    std::vector<double> V(nz);
+    for (int k = 0; k < nz; ++k)
+        fscanf(f, "%d %d %lf\n", &I[k], &J[k], &V[k]);
+    fclose(f);
 
-    // Convert COO to CSR
-    rowptr.assign(M + 1, 0);
-    colidx.resize(nz);
-    val.resize(nz);
+    // ---------- COO → CSR ----------
+    A.allocate(M, N, nz);
 
-    for (int i = 0; i < nz; i++)
-        rowptr[I[i]]++;  // count entries per row
-    for (int i = 0, cumsum = 0; i <= M; i++) {
-        int tmp = rowptr[i];
-        rowptr[i] = cumsum;
+    /* 1. count */
+    for (int k = 0; k < nz; ++k)
+        A.rowptr[I[k]]++;
+    /* 2. exclusive-scan */
+    int cumsum = 0;
+    for (int i = 0; i <= M; ++i) {
+        int tmp   = A.rowptr[i];
+        A.rowptr[i] = cumsum;
         cumsum += tmp;
     }
-    for (int i = 0; i < nz; i++) {
-        int row = I[i];
-        int dst = rowptr[row]++;
-        colidx[dst] = J[i];
-        val[dst] = V[i];
+    /* 3. coloumns and data */
+    for (int k = 0; k < nz; ++k) {
+        int row = I[k];
+        int dst = A.rowptr[row]++;
+        A.colidx[dst] = J[k];
+        A.data  [dst] = V[k];
     }
-    // Fix rowptr
+    /* 4. modify rowptr */
     for (int i = M; i > 0; --i)
-        rowptr[i] = rowptr[i-1];
-    rowptr[0] = 0;
+        A.rowptr[i] = A.rowptr[i-1];
+    A.rowptr[0] = 0;
 }

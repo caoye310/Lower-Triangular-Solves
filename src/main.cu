@@ -1,10 +1,11 @@
-#include <vector>
-#include <iostream>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <iostream>
 #include "mmio.h"
 #include "loadmm.h"
-#include "level.cuh"
+#include "csr_matrix.h"
+#include "dag.h"
+#include "dag_cuda_solve.cuh"
 
 // kernel 在这假设是 template<int TILE_ROWS, int TILE_NZ> __global__ void lts_levelset_tile(...)
 
@@ -41,77 +42,55 @@ bool compare_results(const std::vector<double>& ref,
     return true;
 }
 
-// =================== Matrix Market 读取函数略 ===================
-// 可用你之前写的 load_mtx_to_csr(...)
-
 int main(int argc, char** argv) {
-    std::vector<int> rowptr, colidx;
-    std::vector<double> val;
-    std::vector<double> b, x_ref, x_gpu;
-    int N;
-
     // ---- Step 1: load matrix
-    load_mtx_to_csr(argv[1], rowptr, colidx, val);
-    N = rowptr.size() - 1;
+    CSRMatrix A;
+    load_mtx_to_csr(argv[1], A);
+    CSRMatrix L;
+    csr_lower(A, L);
 
-    // ---- Step 2: 构造 RHS b
-    b.resize(N, 1.0);
+    int N = L.nrows;
 
-    // ---- Step 3: 串行 CPU 参考结果
-    reference_solve_csr(rowptr, colidx, val, b, x_ref);
+    // ---------- Step‑2 RHS ----------
+    std::vector<double> b(N, 1.0);
 
-    // ---- Step 4: 准备 GPU 数据
-    int* d_rowptr, *d_col;
-    double* d_val, *d_b, *d_y;
-    cudaMalloc(&d_rowptr, sizeof(int) * rowptr.size());
-    cudaMalloc(&d_col, sizeof(int) * colidx.size());
-    cudaMalloc(&d_val, sizeof(double) * val.size());
-    cudaMalloc(&d_b, sizeof(double) * b.size());
-    cudaMalloc(&d_y, sizeof(double) * b.size());
+    // ---- Step 3: serial execution for reference
+    std::vector<double> x_ref;
+    reference_solve_csr(L.rowptr, L.colidx, L.data, b, x_ref);
 
-    cudaMemcpy(d_rowptr, rowptr.data(), sizeof(int) * rowptr.size(), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_col, colidx.data(), sizeof(int) * colidx.size(), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_val, val.data(), sizeof(double) * val.size(), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, b.data(), sizeof(double) * b.size(), cudaMemcpyHostToDevice);
-    cudaMemset(d_y, 0, sizeof(double) * b.size());
-
-    // ---- Step 5: Levelset rows —这里可选用你生成好的 levels
-    std::vector<int> rows(N);
-    for (int i = 0; i < N; ++i) rows[i] = i;
-    int* d_rows;
-    cudaMalloc(&d_rows, sizeof(int) * N);
-    cudaMemcpy(d_rows, rows.data(), sizeof(int) * N, cudaMemcpyHostToDevice);
+    // ---- Step 4: Levelset rows
+    std::vector<std::vector<int>> levels;
+    compute_levels(L, levels);      
 
     // ---- Step 6: launch kernel
-    constexpr int TILE_ROWS = 1;
-    constexpr int TILE_NZ   = 128;
-    dim3 grid((N + TILE_ROWS - 1) / TILE_ROWS);
-    dim3 block(32, TILE_ROWS);  // 32 threads x TILE_ROWS rows
+    std::vector<double> y(L.nrows, 0.0);
+
+    /* ---------- CUDA DAG Triangular Solve ---------- */
+    constexpr int TILE_ROWS = 1;      
+    constexpr int TILE_NZ   = 128; 
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
     cudaEventRecord(start);
-    lts_levelset_tile<TILE_ROWS, TILE_NZ><<<grid, block>>>(
-        d_rowptr, d_col, d_val, d_y, d_b, d_y, d_rows, N);
+    parallel_dag_lower_triangular_solve_cuda<TILE_ROWS, TILE_NZ>(
+            L, y, b, levels);
     cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
 
-    cudaDeviceSynchronize();
     float ms = 0;
     cudaEventElapsedTime(&ms, start, stop);
-    std::cout << "[CUDA kernel time] " << ms << " ms\n";
+    std::cout << "[CUDA DAG Solve Time] " << ms << " ms\n";
 
-    // ---- Step 7: copy result and compare
-    x_gpu.resize(N);
-    cudaMemcpy(x_gpu.data(), d_y, sizeof(double) * N, cudaMemcpyDeviceToHost);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
-    bool ok = compare_results(x_ref, x_gpu);
-    std::cout << (ok ? "[PASS] Results match.\n" : "[FAIL] Results mismatch.\n");
+    /* ---------- （可选）用 CPU 做参考结果并比较 ---------- */
+    std::vector<double> y_ref;
+    reference_solve_csr(A.rowptr, A.colidx, A.data, b, y_ref);
 
-    // ---- Clean up
-    cudaFree(d_rowptr); cudaFree(d_col); cudaFree(d_val);
-    cudaFree(d_b); cudaFree(d_y); cudaFree(d_rows);
-
+    bool ok = compare_results(y_ref, y);
+    std::cout << (ok ? "[PASS] GPU == CPU\n" : "[FAIL] mismatch!\n");
     return 0;
 }
