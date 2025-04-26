@@ -10,7 +10,7 @@ void parallel_dag_lower_triangular_solve_cuda(const CSRMatrix &L,
                                               const std::vector<std::vector<int>> &levels)
 {
     const int N = L.nrows;
-    /* ---- 复制矩阵与向量到 GPU ---- */
+
     int    *d_rowptr, *d_col;
     double *d_val, *d_b, *d_y;
     cudaMalloc(&d_rowptr, sizeof(int)    * L.rowptr.size());
@@ -25,7 +25,7 @@ void parallel_dag_lower_triangular_solve_cuda(const CSRMatrix &L,
     cudaMemcpy(d_b     , b.data()       , sizeof(double) * b.size(),        cudaMemcpyHostToDevice);
     cudaMemset (d_y     , 0,              sizeof(double) * y.size());
 
-    /* ---- 逐 level 调度 kernel ---- */
+    /* ---- for each level call kernel ---- */
     for (const auto &rows_vec : levels)
     {
         const int rows = rows_vec.size();
@@ -46,7 +46,7 @@ void parallel_dag_lower_triangular_solve_cuda(const CSRMatrix &L,
     }
     cudaDeviceSynchronize();
 
-    /* ---- 拷回结果 ---- */
+    /* ---- copy result ---- */
     cudaMemcpy(y.data(), d_y, sizeof(double)*N, cudaMemcpyDeviceToHost);
 
     cudaFree(d_rowptr); cudaFree(d_col); cudaFree(d_val);

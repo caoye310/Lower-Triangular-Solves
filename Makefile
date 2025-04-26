@@ -1,27 +1,32 @@
-NVCC      := nvcc
-GXX       := g++
-GCC       := gcc
+CUDA_HOME ?= /opt/nvidia/hpc_sdk/Linux_x86_64/2023/cuda/12.8
 
-INC       := -Iinclude
-NVCCFLAGS := -std=c++17 $(INC) -O2
-CPPFLAGS  := -std=c++17 $(INC) -O2
-CFLAGS    := $(INC) -O2
+INC_BASE   := -Iinclude
+CUDA_INC   := -I$(CUDA_HOME)/include            # 仅 nvcc 使用
+LDLIBS     := -L$(CUDA_HOME)/lib64
 
-CU_SRC   := $(wildcard src/*.cu)
-CPP_SRC  := $(wildcard src/*.cpp)
-C_SRC    := $(wildcard src/*.c)
+NVCC       := nvcc
+GXX        := g++
+GCC        := gcc
 
-CU_OBJS  := $(patsubst src/%.cu,  build/%.o, $(CU_SRC))
-CPP_OBJS := $(patsubst src/%.cpp, build/%.o, $(CPP_SRC))
-C_OBJS   := $(patsubst src/%.c,   build/%.o, $(C_SRC))
-OBJS     := $(CU_OBJS) $(CPP_OBJS) $(C_OBJS)
+NVCCFLAGS  := -std=c++17 $(INC_BASE) $(CUDA_INC) -O2
+CPPFLAGS   := -std=c++17 $(INC_BASE)             -O2
+CFLAGS     :=            $(INC_BASE)             -O2
 
-TARGET   := run_sparse
+CU_SRC     := $(wildcard src/*.cu)
+CPP_SRC    := $(wildcard src/*.cpp)
+C_SRC      := $(wildcard src/*.c)
+
+CU_OBJS    := $(patsubst src/%.cu,  build/%.o, $(CU_SRC))
+CPP_OBJS   := $(patsubst src/%.cpp, build/%.o, $(CPP_SRC))
+C_OBJS     := $(patsubst src/%.c,   build/%.o, $(C_SRC))
+OBJS       := $(CU_OBJS) $(CPP_OBJS) $(C_OBJS)
+
+TARGET     := run_sparse
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) -o $@ $^ $(LDLIBS)
 
 $(shell mkdir -p build)
 

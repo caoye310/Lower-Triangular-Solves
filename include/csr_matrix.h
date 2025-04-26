@@ -20,6 +20,5 @@ void csr_laplacian(CSRMatrix &M, int nx, int ny, int nz);
 void csr_lower(const CSRMatrix &M, CSRMatrix &L);
 void csr_upper(const CSRMatrix &M, CSRMatrix &U);
 void csr_transpose(const CSRMatrix &M, CSRMatrix &T);
-
 #endif  // CSR_MATRIX_H
 
