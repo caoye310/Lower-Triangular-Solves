@@ -8,9 +8,9 @@ NVCC       := nvcc
 GXX        := g++
 GCC        := gcc
 
-NVCCFLAGS  := -std=c++17 $(INC_BASE) $(CUDA_INC) -O2
-CPPFLAGS   := -std=c++17 $(INC_BASE)             -O2
-CFLAGS     :=            $(INC_BASE)             -O2
+NVCCFLAGS  := -std=c++17 $(INC_BASE) $(CUDA_INC) -O2 -G -g
+CPPFLAGS   := -std=c++17 $(INC_BASE)             -O2 -g
+CFLAGS     :=            $(INC_BASE)             -O2 -g
 
 CU_SRC     := $(wildcard src/*.cu)
 CPP_SRC    := $(wildcard src/*.cpp)
@@ -21,11 +21,17 @@ CPP_OBJS   := $(patsubst src/%.cpp, build/%.o, $(CPP_SRC))
 C_OBJS     := $(patsubst src/%.c,   build/%.o, $(C_SRC))
 OBJS       := $(CU_OBJS) $(CPP_OBJS) $(C_OBJS)
 
-TARGET     := run_sparse
+TARGET     := run_sparse run_sparse_ca
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
+#$(TARGET): $(OBJS)
+#$(NVCC) -o $@ $^ $(LDLIBS)
+
+run_sparse: $(filter-out build/main_ca.o,$(OBJS))
+	$(NVCC) -o $@ $^ $(LDLIBS)
+
+run_sparse_ca: $(filter-out build/main.o,$(OBJS))
 	$(NVCC) -o $@ $^ $(LDLIBS)
 
 $(shell mkdir -p build)
