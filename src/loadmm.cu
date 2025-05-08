@@ -73,3 +73,4 @@ void load_mtx_to_csr(const char* fname, CSRMatrix& A)
         A.data  [pos] = V[k];
     }
 }
+

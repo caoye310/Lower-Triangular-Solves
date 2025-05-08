@@ -48,17 +48,20 @@ void reference_solve_csr(const std::vector<int>& rowptr,
 
 // =================== compare results ===================
 bool compare_results(const std::vector<double>& ref,
-                     const std::vector<double>& gpu,
-                     double tol = 1e-6) {
-    for (size_t i = 0; i < ref.size(); ++i) {
-        //std::cout<<ref[i] - gpu[i]<<std::endl;
-        if (std::abs(ref[i] - gpu[i]) > tol) {
-            std::cerr << "Mismatch at i=" << i << ": ref=" << ref[i]
-                     << ", gpu=" << gpu[i] << "\n";
-            return false;
+    const std::vector<double>& gpu,
+    double rtol = 1e-6,
+    double atol = 1e-12){
+        for (size_t i = 0; i < ref.size(); ++i) {
+            double diff = std::abs(ref[i] - gpu[i]);
+            if (diff > atol + rtol * std::abs(ref[i])) {
+                std::cerr << "Mismatch at i=" << i
+                          << ": ref=" << ref[i]
+                          << ", gpu=" << gpu[i]
+                          << ", diff=" << diff << '\n';
+                return false;
+            }
         }
-    }
-    return true;
+        return true;
 }
 
 void print_help() {
@@ -125,7 +128,7 @@ int main(int argc, char** argv) {
     cpu_spilu0(A, L, U);
     int N = L.nrows;
     // ---------- Step‑2 RHS ----------
-    std::vector<double> b(N, 0.0);
+    std::vector<double> b(N, 1.0);
 
     // ---- Step 3: serial execution for reference
     std::vector<double> y_ref(L.nrows, 0.0);
