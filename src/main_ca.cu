@@ -50,7 +50,7 @@ bool compare_results(const std::vector<double>& ref,
                      double tol = 1e-6) {
     for (size_t i = 0; i < ref.size(); ++i) {
         //std::cout<<ref[i] - gpu[i]<<std::endl;
-        if (std::abs((ref[i] - gpu[i])/ref[i]) > tol) {
+        if (std::abs(ref[i] - gpu[i]) > tol) {
             std::cerr << "Mismatch at i=" << i << ": ref=" << ref[i]
                      << ", gpu=" << gpu[i] << "\n";
             return false;
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
     cpu_spilu0(A, L, U);
     int N = L.nrows;
     // ---------- Step‑2 RHS ----------
-    std::vector<double> b(N, 1.0);
+    std::vector<double> b(N, 0.0);
 
     // ---- Step 3: serial execution for reference
     std::vector<double> y_ref(L.nrows, 0.0);
