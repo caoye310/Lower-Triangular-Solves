@@ -61,4 +61,11 @@ void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
     }
 
     /* ---- 拷贝结果 / 释放 ---- */
+    cudaMemcpy(y.data(), d_y, sizeof(double) * y.size(), cudaMemcpyDeviceToHost);
+    
+    cudaFree(d_rowptr);
+    cudaFree(d_col);
+    cudaFree(d_val);
+    cudaFree(d_b);
+    cudaFree(d_y);
 }

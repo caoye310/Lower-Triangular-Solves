@@ -10,6 +10,7 @@
 #include "ilu.h"
 #include "la.h"
 #include "la_cuda_solve.cuh"
+#include "greedy_gran.h"
 
 // =================== serial solver ===================
 void reference_solve_csr(const std::vector<int>& rowptr,
@@ -111,12 +112,6 @@ int main(int argc, char** argv) {
     }
 
     char* input_file = argv[1];
-    std::string algorithm = (argc >= 3) ? argv[2] : "LEVEL";
-    int task_granularity = (argc >= 4) ? std::stoi(argv[3]) : 4;
-
-    std::cout << "Input: " << input_file << "\n";
-    std::cout << "Algorithm: " << algorithm << "\n";
-    std::cout << "Granularity: " << task_granularity << "\n";
 
     constexpr int TILE_ROWS = 1; 
     // Max # non-zero value     
@@ -126,6 +121,13 @@ int main(int argc, char** argv) {
     CSRMatrix A, L, U;
     load_mtx_to_csr(input_file, A);
     cpu_spilu0(A, L, U);
+    std::string algorithm = (argc >= 3) ? argv[2] : "LEVEL";
+    int task_granularity = (argc >= 4) ? std::stoi(argv[3]) : compute_optimal_granularity(L, 14ULL * 1024 * 1024 * 1024);
+
+    std::cout << "Input: " << input_file << "\n";
+    std::cout << "Algorithm: " << algorithm << "\n";
+    std::cout << "Granularity: " << task_granularity << "\n";
+
     int N = L.nrows;
     // ---------- Step‑2 RHS ----------
     std::vector<double> b(N, 1.0);
