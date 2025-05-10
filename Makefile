@@ -1,29 +1,51 @@
-CUDA_HOME  := /usr/local/cuda
-CUDA_INC   := -I$(CUDA_HOME)/include            # Only used by nvcc
-CUDA_LIB   := -L$(CUDA_HOME)/lib64 -lcudart
+CUDA_HOME ?= /opt/nvidia/hpc_sdk/Linux_x86_64/2023/cuda/12.8
 
-CXX        := g++
-CXXFLAGS   := -O3 -Wall -std=c++17
+INC_BASE   := -Iinclude
+CUDA_INC   := -I$(CUDA_HOME)/include            
+LDLIBS     := -L$(CUDA_HOME)/lib64
+
 NVCC       := nvcc
-NVCCFLAGS  := -O3 -arch=sm_75
+GXX        := g++
+GCC        := gcc
 
-TARGET     := run_sparse
-SRCS       := src/main.cu src/loadmm.cpp src/mmio.cpp src/levels.cpp src/ilu.cpp src/greedy_gran.cpp
-OBJS       := $(SRCS:.cpp=.o)
-OBJS       := $(OBJS:.cu=.o)
+NVCCFLAGS  := -std=c++17 $(INC_BASE) $(CUDA_INC) -O2 -G -g
+CPPFLAGS   := -std=c++17 $(INC_BASE)             -O2 -g
+CFLAGS     :=            $(INC_BASE)             -O2 -g
 
-.PHONY: all clean
+CU_SRC     := $(wildcard src/*.cu)
+CPP_SRC    := $(wildcard src/*.cpp)
+C_SRC      := $(wildcard src/*.c)
+
+CU_OBJS    := $(patsubst src/%.cu,  build/%.o, $(CU_SRC))
+CPP_OBJS   := $(patsubst src/%.cpp, build/%.o, $(CPP_SRC))
+C_OBJS     := $(patsubst src/%.c,   build/%.o, $(C_SRC))
+OBJS       := $(CU_OBJS) $(CPP_OBJS) $(C_OBJS)
+
+TARGET     := run_sparse run_sparse_ca
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -o $@ $(CUDA_LIB)
+#$(TARGET): $(OBJS)
+#$(NVCC) -o $@ $^ $(LDLIBS)
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+run_sparse: $(filter-out build/main_ca.o,$(OBJS))
+	$(NVCC) -o $@ $^ $(LDLIBS)
 
-%.o: %.cu
-	$(NVCC) $(NVCCFLAGS) $(CUDA_INC) -c $< -o $@
+run_sparse_ca: $(filter-out build/main.o,$(OBJS))
+	$(NVCC) -o $@ $^ $(LDLIBS)
+
+$(shell mkdir -p build)
+
+build/%.o: src/%.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+
+build/%.o: src/%.cpp
+	$(GXX)  $(CPPFLAGS)  -c $< -o $@
+
+build/%.o: src/%.c
+	$(GCC)  $(CFLAGS)    -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -rf build/*.o $(TARGET)
+
+.PHONY: all clean
