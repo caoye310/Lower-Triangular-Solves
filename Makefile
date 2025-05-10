@@ -1,8 +1,8 @@
-CUDA_HOME ?= /opt/nvidia/hpc_sdk/Linux_x86_64/2023/cuda/12.8
+CUDA_HOME ?= /opt/nvidia/hpc_sdk/Linux_x86_64/2023/compilers
 
-INC_BASE   := -Iinclude
+INC_BASE   := -Iinclude -I$(CUDA_HOME)/include-stdpar
 CUDA_INC   := -I$(CUDA_HOME)/include            
-LDLIBS     := -L$(CUDA_HOME)/lib64
+LDLIBS     := -L$(CUDA_HOME)/lib64 -lcudart
 
 NVCC       := nvcc
 GXX        := g++

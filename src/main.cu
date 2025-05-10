@@ -11,6 +11,7 @@
 #include "la.h"
 #include "la_cuda_solve.cuh"
 #include "greedy_gran.h"
+#include <nvtx3/nvToolsExt.h>
 
 // =================== serial solver ===================
 void reference_solve_csr(const std::vector<int>& rowptr,
@@ -116,7 +117,6 @@ int main(int argc, char** argv) {
     constexpr int TILE_ROWS = 1;  // Reduced from 16 to 8 for better granularity
     // Max # non-zero value     
     constexpr int TILE_NZ   = 128; 
-
     // ---- Step 1: load matrix
     CSRMatrix A, L, U;
     load_mtx_to_csr(input_file, A);
@@ -148,8 +148,9 @@ int main(int argc, char** argv) {
         LASchedule schedule;
         compute_la_schedule(L, task_granularity, schedule);
         run_and_time(algorithm, y_ref, y, [&]() {
-        compute_la_schedule(L, task_granularity, schedule);
+            nvtxRangePushA("LA Algorithm Total");
             parallel_dag_lower_triangular_solve_cuda_la<TILE_ROWS, TILE_NZ>(L, y, b, schedule);
+            nvtxRangePop();
         });
     }
     else if (algorithm == "CA") {

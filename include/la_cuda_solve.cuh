@@ -1,6 +1,8 @@
 #include "csr_matrix.h"
 #include <vector>
 #include "la.h"
+#include <cuda_runtime.h>
+#include <nvtx3/nvToolsExt.h>
 
 template<int TILE_ROWS,int TILE_NZ>
 void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
@@ -23,19 +25,24 @@ void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
     cudaMemset (d_y     , 0,              sizeof(double) * y.size());
 
     /* ===== Two-level loop ===== */
-    for (const auto& coarseLvl : S)                    // (a) coarse level
-    {
+    for (size_t lvl = 0; lvl < S.size(); ++lvl) {
+        const auto& coarseLvl = S[lvl];
+        nvtxRangePushA(("Coarse Level " + std::to_string(lvl)).c_str());
+        
         std::vector<cudaStream_t> streams(coarseLvl.size());
         for (size_t i = 0; i < streams.size(); ++i)
             cudaStreamCreate(&streams[i]);
 
         // A-tasks within the same coarse-level are placed in different streams for hardware parallelism
-        for (size_t t = 0; t < coarseLvl.size(); ++t)  // (b) A-task
-        {
+        for (size_t t = 0; t < coarseLvl.size(); ++t) {
             const auto& inner = coarseLvl[t];
-            for (const auto& rows_vec : inner)         // (c) inner-level
-            {
+            nvtxRangePushA(("A-Task " + std::to_string(t)).c_str());
+            
+            for (size_t i = 0; i < inner.size(); ++i) {
+                const auto& rows_vec = inner[i];
                 if (rows_vec.empty()) continue;
+
+                nvtxRangePushA(("Inner Level " + std::to_string(i)).c_str());
 
                 /* ---- Copy rows ---- */
                 int *d_rows;  const int R = rows_vec.size();
@@ -51,10 +58,22 @@ void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
                     d_rowptr, d_col, d_val, d_b, d_y, d_rows, R);
 
                 cudaFreeAsync(d_rows, streams[t]);
+                
+                nvtxRangePop();
             }
+            
+            nvtxRangePop();
         }
+        
         // Coarse-level barrier: must wait for all streams in this level to complete
-        for (auto& s : streams) { cudaStreamSynchronize(s); cudaStreamDestroy(s); }
+        nvtxRangePushA("Stream Synchronization");
+        for (auto& s : streams) { 
+            cudaStreamSynchronize(s); 
+            cudaStreamDestroy(s); 
+        }
+        nvtxRangePop();
+        
+        nvtxRangePop();
     }
 
     /* ---- Copy results / Free memory ---- */
