@@ -2,8 +2,8 @@
 
 #include "csr_matrix.h"
 
-// 计算每个任务的内存需求（以字节为单位）
+// Calculate memory requirement for each task (in bytes)
 size_t compute_task_memory_requirement(const CSRMatrix &L, int start_row, int end_row);
 
-// 计算最优任务粒度
+// Compute optimal task granularity
 int compute_optimal_granularity(const CSRMatrix &L, size_t gpu_memory_limit); 

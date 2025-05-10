@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
 
     char* input_file = argv[1];
 
-    constexpr int TILE_ROWS = 1; 
+    constexpr int TILE_ROWS = 1;  // Reduced from 16 to 8 for better granularity
     // Max # non-zero value     
     constexpr int TILE_NZ   = 128; 
 

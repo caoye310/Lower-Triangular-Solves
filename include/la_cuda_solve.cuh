@@ -22,22 +22,22 @@ void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
     cudaMemcpy(d_b     , b.data()       , sizeof(double) * b.size(),        cudaMemcpyHostToDevice);
     cudaMemset (d_y     , 0,              sizeof(double) * y.size());
 
-    /* ===== 双级循环 ===== */
-    for (const auto& coarseLvl : S)                    // ⓐ coarse level
+    /* ===== Two-level loop ===== */
+    for (const auto& coarseLvl : S)                    // (a) coarse level
     {
         std::vector<cudaStream_t> streams(coarseLvl.size());
         for (size_t i = 0; i < streams.size(); ++i)
             cudaStreamCreate(&streams[i]);
 
-        // 同一 coarse-level 内的 A-tasks 放不同 stream，可硬件并行
-        for (size_t t = 0; t < coarseLvl.size(); ++t)  // ⓑ A-task
+        // A-tasks within the same coarse-level are placed in different streams for hardware parallelism
+        for (size_t t = 0; t < coarseLvl.size(); ++t)  // (b) A-task
         {
             const auto& inner = coarseLvl[t];
-            for (const auto& rows_vec : inner)         // ⓒ inner-level
+            for (const auto& rows_vec : inner)         // (c) inner-level
             {
                 if (rows_vec.empty()) continue;
 
-                /* ---- 复制 rows ---- */
+                /* ---- Copy rows ---- */
                 int *d_rows;  const int R = rows_vec.size();
                 cudaMallocAsync(&d_rows, R*sizeof(int), streams[t]);
                 cudaMemcpyAsync(d_rows, rows_vec.data(),
@@ -51,16 +51,13 @@ void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,
                     d_rowptr, d_col, d_val, d_b, d_y, d_rows, R);
 
                 cudaFreeAsync(d_rows, streams[t]);
-                /* —— 如果你愿意，也可以把同一 A-task 的所有 inner-level
-                      拼成一个 rows_vec，在 kernel 内做 barrier-free 批量解，
-                      这里只保持与你原逻辑一致 —— */
             }
         }
-        // coarse-level barrier：必须等本层全部 streams 完毕
+        // Coarse-level barrier: must wait for all streams in this level to complete
         for (auto& s : streams) { cudaStreamSynchronize(s); cudaStreamDestroy(s); }
     }
 
-    /* ---- 拷贝结果 / 释放 ---- */
+    /* ---- Copy results / Free memory ---- */
     cudaMemcpy(y.data(), d_y, sizeof(double) * y.size(), cudaMemcpyDeviceToHost);
     
     cudaFree(d_rowptr);
