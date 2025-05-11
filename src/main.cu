@@ -11,6 +11,8 @@
 #include "la.h"
 #include "la_cuda_solve.cuh"
 #include "greedy_gran.h"
+#include "ca.h"
+#include "ca_cuda_solve.cuh"
 #include <nvtx3/nvToolsExt.h>
 
 // =================== serial solver ===================
@@ -132,14 +134,16 @@ int main(int argc, char** argv) {
     // ---------- Step‑2 RHS ----------
     std::vector<double> b(N, 1.0);
 
+    // compute DAG-based level set
+    std::vector<std::vector<int>> levels;
+    compute_levels(L, levels);
+
     // ---- Step 3: serial execution for reference
     std::vector<double> y_ref(L.nrows, 0.0);
     reference_solve_csr(L.rowptr, L.colidx, L.data, b, y_ref);
 
     std::vector<double> y(L.nrows, 0.0);
     if (algorithm == "LEVEL") {
-        std::vector<std::vector<int>> levels;
-        compute_levels(L, levels);
         run_and_time(algorithm, y_ref, y, [&]() {
             parallel_dag_lower_triangular_solve_cuda<TILE_ROWS, TILE_NZ>(L, y, b, levels);
         });
@@ -154,7 +158,14 @@ int main(int argc, char** argv) {
         });
     }
     else if (algorithm == "CA") {
-      
+        std::vector<std::vector<std::vector<int>>> ca_levels;
+        ca_aggregation(L, levels, task_granularity, ca_levels);
+        run_and_time(algorithm, y_ref, y, [&]() {
+            nvtxRangePushA("CA Algorithm Total");
+            parallel_ca_lower_triangular_solve_cuda<TILE_ROWS, TILE_NZ>(
+            L, y, b, ca_levels);
+            nvtxRangePop();
+        });
     }
     return 0;
 }

@@ -11,64 +11,61 @@
 #include "ilu.h"
 
 
-// void ca_aggregation_levels(const std::vector<std::vector<int>> &levels, const int s, std::vector<std::vector<int>> &ca_levels) {
-//     // int N = L.nnz;
-//     // int num_levels = N / s + 1;
-//     int i = 0;
-//     // iterate levels
-//     for (auto &level : levels) { 
-//         if (level.size() >= s) { // if the original level size >= s, the level is an ATA
-//             if (i != 0)
-//                 i++;
-//             ca_levels[i] = level;
-//             i++;    
-//         }
-//         else {
-//             for (auto &task : level) {
-//                 ca_levels[i].push_back(task);
-//                 if (ca_levels[i].size() > s) { // once size > s, strat a new ca_level
-//                     i++;
-//                     ca_levels[i].push_back(task);
-//                 }
-//             }
-//         }
-        
-//     }
-// }
-
-void ca_aggregation(const std::vector<std::vector<int>> &levels, const int s, std::vector<std::vector<std::vector<int>>> &ca_levels) {
+void ca_aggregation(const CSRMatrix &L, const std::vector<std::vector<int>> &levels, const int s, std::vector<std::vector<std::vector<int>>> &ca_levels) {
 
     // int N = L.nnz;
-    // int num_levels = N / s + 1;
-    int num_lv = levels.size();
-    ca_levels.clear();
-    ca_levels.resize(num_lv); 
-
     int i = 0; // outer level id
     int j = 0; // inner level id
+    int num_task = 0;
     // iterate levels
-    for (auto &level : levels) { 
+    for (auto &level : levels) {
         if (level.size() >= s) { // if the original level size >= s, the level is an ATA
-            if (i != 0) {
-                i++;
-            }
+            // Ensure outer level exists
+            if (j != 0) i++;
+
+            
+            if (ca_levels.size() <= i)
+                ca_levels.resize(i + 1);
+
+
+            // Clear and resize inner level to 1
+            ca_levels[i].clear();
             ca_levels[i].resize(1);
+
+            // Directly assign the level to the first inner vector
             ca_levels[i][0] = level;
-            i++;       
+
+            i++;  // move to next outer level
+            j = 0;
+            num_task = 0; // reset inner level id       
         }
         else {
-            ca_levels[i].resize(j+1);
+            // ca_levels[i].resize(j+1);
             for (auto &task : level) {
+
+                // Ensure outer level exists
+                if (ca_levels.size() <= i)
+                    ca_levels.resize(i + 1);
+
+                // Ensure inner level exists
+                if (ca_levels[i].size() <= j)
+                    ca_levels[i].resize(j + 1);
+
+                // Append task
                 ca_levels[i][j].push_back(task);
-                if (ca_levels[i].size() > s) { // once size > s, strat a new ca_level
+                num_task++;
+
+                // If current inner level exceeds size limit, move to next outer level
+                if (num_task == s) {
                     i++;
                     j = 0;
-                    ca_levels[i][j].push_back(task);
+                    num_task = 0;
                 }
             }
             j++; // once into new level_set, inner level id + 1
-        }   
+        }      
     }
 }
+
 
 

@@ -1,4 +1,5 @@
 // Improved version of dag_lts_kernel with warp-safe reduction and comments
+#pragma once
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
