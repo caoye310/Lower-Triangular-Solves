@@ -112,4 +112,4 @@ make clean
 
 ## References
 
-The project is based on the paper "Helal-sparse-solvers-pact19.pdf" included in the repository.
+Helal, Ahmed E., et al. "Adaptive task aggregation for high-performance sparse solvers on GPUs." 2019 28th International Conference on Parallel Architectures and Compilation Techniques (PACT). IEEE, 2019.
