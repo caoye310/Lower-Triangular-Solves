@@ -60,7 +60,7 @@ The project comes with a convenient `run.sh` script that runs the solver on mult
 
 The script will:
 - Run each matrix 20 times
-- Use the LA_OPT optimization strategy
+- Use the LEVEL optimization strategy
 - Generate performance metrics for analysis
 
 ### Manual Execution
@@ -73,7 +73,7 @@ You can also run the solver manually:
 Where:
 - `<matrix_file>`: Path to the matrix file (e.g., "data/onetone1/onetone1.mtx")
 - `[optimization_strategy]`: Optional optimization strategy (e.g., "LA_OPT")
-- `[size]`: Optional size parameter
+- `[size]`: Task granularity size
 
 ### Performance Profiling with Nsight Systems
 
