@@ -1,8 +1,10 @@
+#pragma once
 #include "csr_matrix.h"
 #include <vector>
 #include "la.h"
 #include <cuda_runtime.h>
 #include <nvtx3/nvToolsExt.h>
+#include "dag_lts_kernel.cuh"
 
 template<int TILE_ROWS,int TILE_NZ>
 void parallel_dag_lower_triangular_solve_cuda_la(const CSRMatrix& L,

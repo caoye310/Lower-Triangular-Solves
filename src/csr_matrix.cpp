@@ -99,12 +99,12 @@ void csr_laplacian(CSRMatrix &M, int nx, int ny, int nz) {
     }
 }
 
-// Extract strictly lower triangular part of M (excluding diagonal)
+// Extract lower triangular part of M (including diagonal)
 void csr_lower(const CSRMatrix &M, CSRMatrix &L) {
     int nnzL = 0;
     for (int i = 0; i < M.nrows; i++) {
         for (int k = M.rowptr[i]; k < M.rowptr[i + 1]; k++) {
-            if (M.colidx[k] < i) nnzL++; // Count strictly lower elements
+            if (M.colidx[k] <= i) nnzL++; // Count lower elements including diagonal
         }
     }
 
@@ -115,7 +115,7 @@ void csr_lower(const CSRMatrix &M, CSRMatrix &L) {
     for (int i = 0; i < M.nrows; i++) {
         for (int k = M.rowptr[i]; k < M.rowptr[i + 1]; k++) {
             int j = M.colidx[k];
-            if (j < i) {
+            if (j <= i) {
                 L.colidx[m] = j;
                 L.data[m] = M.data[k]; // Copy value
                 m++;

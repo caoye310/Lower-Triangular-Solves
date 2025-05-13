@@ -8,12 +8,14 @@
 #include "levels.h"
 #include "dag_cuda_solve.cuh"
 #include "ilu.h"
-#include "la.h"
+#include "la_opt.h"
 #include "la_cuda_solve.cuh"
+#include "la_cuda_solve_opt.cuh"
 #include "greedy_gran.h"
 #include "ca.h"
 #include "ca_cuda_solve.cuh"
 #include <nvtx3/nvToolsExt.h>
+#include "la.h"
 
 // =================== serial solver ===================
 void reference_solve_csr(const std::vector<int>& rowptr,
@@ -77,10 +79,11 @@ void print_help() {
     std::cout << "  [algorithm]           Optional. Scheduling algorithm to use. Options:\n";
     std::cout << "                          - LEVEL (default): level-scheduling\n";
     std::cout << "                          - LA: locality-aware scheduling\n";
+    std::cout << "                          - LA_OPT: optimized locality-aware scheduling\n";
     std::cout << "                          - CA: concurrency-aware scheduling\n";
     std::cout << "  [task_granularity]    Optional. Number of user tasks per aggregated task (default: 4).\n";
     std::cout << "\nExample:\n";
-    std::cout << "  ./run_sparse data.mtx LA 8\n";
+    std::cout << "  ./run_sparse data.mtx LA_OPT 8\n";
 }
 
 template <typename ComputeFunc>
@@ -123,6 +126,7 @@ int main(int argc, char** argv) {
     CSRMatrix A, L, U;
     load_mtx_to_csr(input_file, A);
     cpu_spilu0(A, L, U);
+    
     std::string algorithm = (argc >= 3) ? argv[2] : "LEVEL";
     int task_granularity = (argc >= 4) ? std::stoi(argv[3]) : compute_optimal_granularity(L, 14ULL * 1024 * 1024 * 1024);
 
@@ -133,6 +137,16 @@ int main(int argc, char** argv) {
     int N = L.nrows;
     // ---------- Step‑2 RHS ----------
     std::vector<double> b(N, 1.0);
+
+    // Add 1 to all diagonal elements of L
+    // for (int i = 0; i < N; ++i) {
+    //     for (int p = L.rowptr[i]; p < L.rowptr[i + 1]; ++p) {
+    //         if (L.colidx[p] == i) {
+    //             L.data[p] += 1.0;
+    //             break;
+    //         }
+    //     }
+    // }
 
     // compute DAG-based level set
     std::vector<std::vector<int>> levels;
@@ -154,6 +168,15 @@ int main(int argc, char** argv) {
         run_and_time(algorithm, y_ref, y, [&]() {
             nvtxRangePushA("LA Algorithm Total");
             parallel_dag_lower_triangular_solve_cuda_la<TILE_ROWS, TILE_NZ>(L, y, b, schedule);
+            nvtxRangePop();
+        });
+    }
+    else if (algorithm == "LA_OPT") {
+        LAScheduleOPT schedule;
+        compute_la_schedule(L, task_granularity, schedule);
+        run_and_time(algorithm, y_ref, y, [&]() {
+            nvtxRangePushA("LA Algorithm Total");
+            parallel_dag_lower_triangular_solve_cuda_la_opt<TILE_ROWS, TILE_NZ>(L, y, b, schedule);
             nvtxRangePop();
         });
     }
