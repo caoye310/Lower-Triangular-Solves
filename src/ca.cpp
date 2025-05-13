@@ -122,11 +122,13 @@ void ata_inner_aggregation(const CSRMatrix &L, const std::vector<std::vector<int
                         auto cnt2 = std::count(dependency.begin(), dependency.end(), target); // check if the traget has been solved
 
                         if (target != row && cnt2 > 0) {
-                            level_array[row] = level_array[target] + 1;
+                            int old_level = level_array[row];
+                            level_array[row] = std::max(old_level, level_array[target] + 1);
                             max_level = std::max(max_level, level_array[row]);
                         }
 
                     }
+                    dependency.push_back(row);
                 }   
 
             }
