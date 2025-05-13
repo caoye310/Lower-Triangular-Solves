@@ -7,7 +7,7 @@ extra_flag="$1"
 matrices=( "onetone1" "onetone2" "bcircuit" "G2_circuit" "hcircuit" "parabolic_fem" )
 
 # 默认三种模式：无 flag、CA、LA
-opts=( "LA" "" "CA" "LA_OPT")
+opts=("LA_OPT") #"LA" "" "CA" 
 
 size=()
 # 如果用户传了 extra_flag，就追加到 size 数组里
@@ -18,7 +18,7 @@ fi
 for m in "${matrices[@]}"; do
   file="data/$m/$m.mtx"
   for opt in "${opts[@]}"; do
-    for i in {1..2}; do
+    for i in {1..20}; do
       if [ -z "$opt" ]; then
         echo "===== $m DAG Run #$i ====="
         ./run_sparse "$file"
