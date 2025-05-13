@@ -45,15 +45,17 @@ __global__ void set_scheduled_kernel(
     // Because SET puts predecessor rows into *earlier* warps (row_id smaller),
     // there is no cyclic dependency across warps, hence safe.
     // ---------------------------------------------------------------------
-
+    nvtxRangePushA("Wait for Dependencies");
     if (lane == 0)
         while (atomicAdd(&deps.u_deps[row_id], 0) > 0) { /* spin */ }
 
      __syncwarp();                                         // make sure everyone sees row ready
+    nvtxRangePop();
 
     // ---------------------------------------------------------------------
     // Compute ∑ a_ij * x_j  (j < i)   with warp‑parallel reduction
     // ---------------------------------------------------------------------
+    nvtxRangePushA("Compute Sum");
     double partial = 0.0;
     for (int p = rowptr[row] + lane; p < rowptr[row + 1]; p += WARP) {
         int    col = colidx[p];
@@ -65,17 +67,17 @@ __global__ void set_scheduled_kernel(
         }
     }
     double sum = warp_reduce_sum(partial);
+    nvtxRangePop();
 
     // ---------------------------------------------------------------------
     // lane0 finds diagonal & writes solution, then pushes to successors
     // ---------------------------------------------------------------------
+    nvtxRangePushA("Update Solution and Notify Successors");
     if (lane == 0) {
         double diag = 0.0;
         for (int p = rowptr[row]; p < rowptr[row + 1]; ++p) {
             if (colidx[p] == row) { diag = values[p]; break; }
         }
-        // if (lane == 0 && fabs(diag) < 1e-14)
-        //     printf("[noDiag] row %d\n", row);
         x[row] = (b[row] - sum) / diag;
        
         __threadfence();                                   // ensure x visible before unlock
@@ -87,6 +89,7 @@ __global__ void set_scheduled_kernel(
             atomicSub(&deps.u_deps[succ], 1);
         }
     }
+    nvtxRangePop();
 }
 
 // ============================================================================
@@ -102,6 +105,7 @@ inline void parallel_dag_lower_triangular_solve_cuda_la_opt(
     const std::vector<double>& b,
     const LAScheduleOPT& S)
 {
+    nvtxRangePushA("Memory Allocation and Initial Copy");
     // --- 1. copy static CSR & RHS to device ---
     int    *d_rptr, *d_cidx;   double *d_val;
     double *d_b,   *d_y;
@@ -115,19 +119,26 @@ inline void parallel_dag_lower_triangular_solve_cuda_la_opt(
     cudaMemcpy(d_val,  L.data.data(),   sizeof(double)* L.data.size(),   cudaMemcpyHostToDevice);
     cudaMemcpy(d_b,    b.data(),        sizeof(double)* b.size(),        cudaMemcpyHostToDevice);
     cudaMemset(d_y,    0,               sizeof(double)* y.size());
+    nvtxRangePop();
 
     // --- 2. iterate over coarse levels (outer Topo levels) ---
     for (size_t lvl = 0; lvl < S.schedule.size(); ++lvl) {
+        nvtxRangePushA(("Level " + std::to_string(lvl)).c_str());
         const auto &lvlTasks = S.schedule[lvl];
         std::vector<cudaStream_t> streams(lvlTasks.size());
         for (auto &s : streams) cudaStreamCreate(&s);
 
         for (size_t t = 0; t < lvlTasks.size(); ++t) {
+            nvtxRangePushA(("Stream " + std::to_string(t)).c_str());
             const auto &rows_h = lvlTasks[t];                 // rows in this A‑task
             const int R = static_cast<int>(rows_h.size());
-            if (!R) continue;
+            if (!R) {
+                nvtxRangePop();
+                continue;
+            }
+            
+            nvtxRangePushA("Task Memory Allocation");
             // ------ 2.1  Allocate & copy A‑task private tables ------
-            // rows_h 已经是“按 SET depth 升序”构造的 (见 compute_la_schedule)
             int *d_rows, *d_udep, *d_sptr, *d_sidx;
 
             cudaMallocAsync(&d_rows,  sizeof(int)   * R,                 streams[t]);
@@ -137,10 +148,14 @@ inline void parallel_dag_lower_triangular_solve_cuda_la_opt(
             const auto& rows    = S.schedule[lvl][t];
             cudaMallocAsync(&d_sptr,  sizeof(int)   * sptr_h.size(),      streams[t]);
             cudaMallocAsync(&d_sidx,  sizeof(int)   * sidx_h.size(),      streams[t]);
+            nvtxRangePop();
+
+            nvtxRangePushA("Task Memory Copy");
             cudaMemcpyAsync(d_rows,  rows_h.data(), sizeof(int)*R,           cudaMemcpyHostToDevice, streams[t]);
             cudaMemcpyAsync(d_udep,  S.u_deps[lvl][t].data(), sizeof(int)*R, cudaMemcpyHostToDevice, streams[t]);
             cudaMemcpyAsync(d_sptr,  sptr_h.data(), sizeof(int)*sptr_h.size(), cudaMemcpyHostToDevice, streams[t]);
             cudaMemcpyAsync(d_sidx,  sidx_h.data(), sizeof(int)*sidx_h.size(), cudaMemcpyHostToDevice, streams[t]);
+            nvtxRangePop();
 
             // ------ 2.2  Build TaskDependency value ------
             TaskDependency dep{};
@@ -156,18 +171,32 @@ inline void parallel_dag_lower_triangular_solve_cuda_la_opt(
                 d_rows, R, dep);
             cudaDeviceSynchronize();
 
+            nvtxRangePushA("Task Memory Free");
             // free A‑task private buffers after stream done
             cudaFreeAsync(d_rows,  streams[t]);
             cudaFreeAsync(d_udep,  streams[t]);
             cudaFreeAsync(d_sptr,  streams[t]);
             cudaFreeAsync(d_sidx,  streams[t]);
+            nvtxRangePop();
+            
+            nvtxRangePop(); // Stream
         }
-        for (auto &s : streams) { cudaStreamSynchronize(s); cudaStreamDestroy(s);}    
+
+        nvtxRangePushA("Level Synchronization");
+        for (auto &s : streams) { 
+            cudaStreamSynchronize(s); 
+            cudaStreamDestroy(s); 
+        }
+        nvtxRangePop();
+        
+        nvtxRangePop(); // Level
     }
 
+    nvtxRangePushA("Final Memory Operations");
     // --- 3. copy result back ---
     cudaMemcpy(y.data(), d_y, sizeof(double)*y.size(), cudaMemcpyDeviceToHost);
 
     cudaFree(d_rptr); cudaFree(d_cidx); cudaFree(d_val);
     cudaFree(d_b);   cudaFree(d_y);
+    nvtxRangePop();
 }

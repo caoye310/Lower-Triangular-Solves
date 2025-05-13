@@ -4,13 +4,13 @@
 extra_flag="$1"
 
 # 要跑的矩阵名（不带路径后缀）
-matrices=( "onetone1" "onetone2" "bcircuit" "G2_circuit" )
+matrices=( "onetone1" "onetone2" "bcircuit" "G2_circuit" "hcircuit" "parabolic_fem" )
 
 # 默认三种模式：无 flag、CA、LA
-opts=( "LA" "" "CA" )
+opts=( "LA" "" "CA" "LA_OPT")
 
-size=("")
-# 如果用户传了 extra_flag，就追加到 opts 数组里
+size=()
+# 如果用户传了 extra_flag，就追加到 size 数组里
 if [ -n "$extra_flag" ]; then
   size+=( "$extra_flag" )
 fi
@@ -33,7 +33,3 @@ for m in "${matrices[@]}"; do
     done
   done
 done
-
-
-
-

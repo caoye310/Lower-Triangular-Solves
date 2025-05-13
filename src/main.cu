@@ -175,18 +175,20 @@ int main(int argc, char** argv) {
         LAScheduleOPT schedule;
         compute_la_schedule(L, task_granularity, schedule);
         run_and_time(algorithm, y_ref, y, [&]() {
-            nvtxRangePushA("LA Algorithm Total");
+            nvtxRangePushA("LA_OPT Algorithm Total");
             parallel_dag_lower_triangular_solve_cuda_la_opt<TILE_ROWS, TILE_NZ>(L, y, b, schedule);
             nvtxRangePop();
         });
     }
     else if (algorithm == "CA") {
-        std::vector<std::vector<std::vector<int>>> ca_levels;
-        ca_aggregation(L, levels, task_granularity, ca_levels);
+        std::vector<std::vector<int>> ca_levels;
+        std::vector<std::vector<std::vector<int>>> ata;
+        ca_ata(L, levels, task_granularity, ca_levels);
+        ata_inner_aggregation(L, ca_levels, task_granularity, ata);
         run_and_time(algorithm, y_ref, y, [&]() {
             nvtxRangePushA("CA Algorithm Total");
             parallel_ca_lower_triangular_solve_cuda<TILE_ROWS, TILE_NZ>(
-            L, y, b, ca_levels);
+            L, y, b, ata);
             nvtxRangePop();
         });
     }
